@@ -31,7 +31,10 @@ func (s ParcelStore) Get(number int) (Parcel, error) {
 
 	var p Parcel
 	err := row.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
-	return p, err
+	if err != nil { // добавлена явная обработка ошибки
+		return Parcel{}, err
+	}
+	return p, nil
 }
 
 // GetByClient возвращает все посылки указанного клиента
@@ -47,10 +50,13 @@ func (s ParcelStore) GetByClient(client int) ([]Parcel, error) {
 	for rows.Next() {
 		var p Parcel
 		err := rows.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
-		if err != nil {
+		if err != nil { // обработка ошибки при Scan
 			return nil, err
 		}
 		res = append(res, p)
+	}
+	if err = rows.Err(); err != nil { // обработка ошибки из rows
+		return nil, err
 	}
 	return res, nil
 }
@@ -64,28 +70,39 @@ func (s ParcelStore) SetStatus(number int, status string) error {
 
 // SetAddress обновляет адрес доставки только если посылка зарегистрирована
 func (s ParcelStore) SetAddress(number int, address string) error {
-	p, err := s.Get(number)
+	query := `
+		UPDATE parcel
+		SET address = ?
+		WHERE number = ? AND status = 'registered'` // объединено в один запрос
+	res, err := s.db.Exec(query, address, number)
 	if err != nil {
 		return err
 	}
-	if p.Status != ParcelStatusRegistered {
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
 		return errors.New("нельзя изменить адрес: посылка уже отправлена или доставлена")
 	}
-	query := `UPDATE parcel SET address = ? WHERE number = ?`
-	_, err = s.db.Exec(query, address, number)
-	return err
+	return nil
 }
 
 // Delete удаляет посылку, если её статус "зарегистрирована"
 func (s ParcelStore) Delete(number int) error {
-	p, err := s.Get(number)
+	query := `
+		DELETE FROM parcel
+		WHERE number = ? AND status = 'registered'` // объединено в один запрос
+	res, err := s.db.Exec(query, number)
 	if err != nil {
 		return err
 	}
-	if p.Status != ParcelStatusRegistered {
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
 		return errors.New("нельзя удалить посылку: она уже отправлена или доставлена")
 	}
-	query := `DELETE FROM parcel WHERE number = ?`
-	_, err = s.db.Exec(query, number)
-	return err
+	return nil
 }

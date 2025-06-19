@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
 )
@@ -38,9 +39,9 @@ func TestAddGetDelete(t *testing.T) {
 
 	p, err := store.Get(id)
 	require.NoError(t, err)
-	require.Equal(t, parcel.Client, p.Client)
-	require.Equal(t, parcel.Status, p.Status)
-	require.Equal(t, parcel.Address, p.Address)
+	assert.Equal(t, parcel.Client, p.Client) // заменено require - assert
+	assert.Equal(t, parcel.Status, p.Status)
+	assert.Equal(t, parcel.Address, p.Address)
 
 	err = store.Delete(id)
 	require.NoError(t, err)
@@ -66,9 +67,10 @@ func TestSetAddress(t *testing.T) {
 
 	p, err := store.Get(id)
 	require.NoError(t, err)
-	require.Equal(t, newAddress, p.Address)
+	assert.Equal(t, newAddress, p.Address) // assert вместо require
 
-	_ = store.Delete(id)
+	err = store.Delete(id) // проверка ошибки
+	require.NoError(t, err)
 }
 
 func TestSetStatus(t *testing.T) {
@@ -82,14 +84,16 @@ func TestSetStatus(t *testing.T) {
 	id, err := store.Add(parcel)
 	require.NoError(t, err)
 
+	// Меняем статус на "отправлена"
 	err = store.SetStatus(id, ParcelStatusSent)
 	require.NoError(t, err)
 
 	p, err := store.Get(id)
 	require.NoError(t, err)
-	require.Equal(t, ParcelStatusSent, p.Status)
+	assert.Equal(t, ParcelStatusSent, p.Status)
 
-	_ = store.Delete(id)
+	err = store.Delete(id)
+	require.Error(t, err)
 }
 
 func TestGetByClient(t *testing.T) {
@@ -112,13 +116,15 @@ func TestGetByClient(t *testing.T) {
 
 	stored, err := store.GetByClient(client)
 	require.NoError(t, err)
-	require.Len(t, stored, 3)
+	assert.Len(t, stored, 3) // заменено с require.Len
 
 	for _, p := range stored {
 		expected := parcelMap[p.Number]
-		require.Equal(t, expected.Address, p.Address)
-		require.Equal(t, expected.Status, p.Status)
-		require.Equal(t, expected.Client, p.Client)
-		_ = store.Delete(p.Number)
+		assert.Equal(t, expected, p) // заменено с трёх require.Equal
+	}
+
+	for _, p := range stored {
+		err := store.Delete(p.Number) // перемещено из цикла выше
+		require.NoError(t, err)
 	}
 }
